@@ -1,15 +1,33 @@
-// Copyright 2009 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// Copyrite (c) 2015 SecurityKISS Ltd (http://www.securitykiss.com)  
+//
+// The MIT License (MIT)
+//
+// Yes, Mr patent attorney, you have nothing to do here. Find a decent job instead.
+// Fight intellectual "property".
+//
+// Permission is hereby granted, free of charge, to any person obtaining
+// a copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to
+// permit persons to whom the Software is furnished to do so, subject to
+// the following conditions:
+//
+// The above copyright notice and this permission notice shall be
+// included in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+// LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+// OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+// WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Generate a self-signed X.509 certificate for a TLS server. Outputs to
-// 'cert.pem' and 'key.pem' and will overwrite existing files.
 
 package main
 
 import (
-    "crypto/ecdsa"
-//    "crypto/elliptic"
     "crypto/rand"
     "crypto/rsa"
     "crypto/x509"
@@ -20,9 +38,7 @@ import (
     "fmt"
     "log"
     "math/big"
-//    "net"
     "os"
-//    "strings"
     "time"
 )
 
@@ -39,10 +55,9 @@ func main() {
     var err error
     flag.Parse()
 
-    csrfile := "/home/sk/seckiss/vigo/gossl/client.csr"
+    csrfile := "/home/sk/seckiss/confidential/sk/keys/fruho/vpn/sampleclient.csr"
     cakeyfile := "/home/sk/seckiss/confidential/sk/keys/fruho/vpn/ca.key"
     cacrtfile := "/home/sk/seckiss/confidential/sk/keys/fruho/vpn/ca.crt"
-
 
     csrbytes, err := ioutil.ReadFile(csrfile)
     if err != nil {
