@@ -22,5 +22,5 @@ You can inspect the generated certificate in human readable form with this comma
 
     openssl x509 -text -noout -in client.crt
 
-Compile from [sources](https://github.com/securitykiss-com/gossl/releases/tag/0.1.0) or grab the [binary](https://github.com/securitykiss-com/gossl/releases/tag/0.1.0).
+Compile from [sources](https://github.com/securitykiss-com/gossl/releases) or grab the [binary](https://github.com/securitykiss-com/gossl/releases).
 
