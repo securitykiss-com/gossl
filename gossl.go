@@ -31,127 +31,175 @@ import (
     "crypto/rand"
     "crypto/rsa"
     "crypto/x509"
-//    "crypto/x509/pkix"
     "encoding/pem"
     "io/ioutil"
     "flag"
     "fmt"
-    "log"
     "math/big"
     "os"
     "time"
+    "regexp"
+    "strconv"
 )
 
-var (
-    host       = flag.String("host", "", "Comma-separated hostnames and IPs to generate a certificate for")
-    validFrom  = flag.String("start-date", "", "Creation date formatted as Jan 1 15:04:05 2011")
-    validFor   = flag.Duration("duration", 365*24*time.Hour, "Duration that certificate is valid for")
-    isCA       = flag.Bool("ca", false, "whether this cert should be its own Certificate Authority")
-    rsaBits    = flag.Int("rsa-bits", 2048, "Size of RSA key to generate. Ignored if --ecdsa-curve is set")
-    ecdsaCurve = flag.String("ecdsa-curve", "", "ECDSA curve to use to generate a key. Valid values are P224, P256, P384, P521")
-)
 
-func main() {
-    var err error
-    flag.Parse()
+func x509sign(cakey *rsa.PrivateKey, cacrt *x509.Certificate, csr *x509.CertificateRequest, notBefore *time.Time, notAfter *time.Time) ([]byte, error) {
+    serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+    serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+    if err != nil {
+        return nil, err
+    }
+    template := x509.Certificate{
+        SerialNumber: serialNumber,
+        Subject: csr.Subject,
+        NotBefore: *notBefore,
+        NotAfter:  *notAfter,
+    }
+    derBytes, err := x509.CreateCertificate(rand.Reader, &template, cacrt, csr.PublicKey, cakey)
+    if err != nil {
+        return nil, err
+    }
+    return derBytes, nil
+}
 
-    csrfile := "/home/sk/seckiss/confidential/sk/keys/fruho/vpn/sampleclient.csr"
-    cakeyfile := "/home/sk/seckiss/confidential/sk/keys/fruho/vpn/ca.key"
-    cacrtfile := "/home/sk/seckiss/confidential/sk/keys/fruho/vpn/ca.crt"
 
+func parseCsr(csrfile string) (*x509.CertificateRequest, error) {
     csrbytes, err := ioutil.ReadFile(csrfile)
     if err != nil {
-        panic(err)
+        return nil, err
     }
     csrblock, _ := pem.Decode(csrbytes)
     if csrblock == nil {
-        panic("Not valid CSR")
+        return nil, fmt.Errorf("PEM encoded data not found in %s", csrfile)
     }
-    asn := csrblock.Bytes
-    certRequest, err := x509.ParseCertificateRequest(asn)
-    fmt.Printf("CSR Subject=%v\n", certRequest.Subject)
+    return x509.ParseCertificateRequest(csrblock.Bytes)
+}
 
-
-
+func parseCakey(cakeyfile string) (*rsa.PrivateKey, error) {
     cakeybytes, err := ioutil.ReadFile(cakeyfile)
     if err != nil {
-        panic(err)
+        return nil, err
     }
     cakeyblock, _ := pem.Decode(cakeybytes)
     if cakeyblock == nil {
-        panic("Not valid CA key")
+        return nil, fmt.Errorf("Not valid CA key %s", cakeyfile)
     }
     der := cakeyblock.Bytes
-
-//    fmt.Printf("der=%v\n", der)
     cakey, err := x509.ParsePKCS8PrivateKey(der)
-//    fmt.Printf("%T\n", cakey)
-    switch cakey.(type) {
-    case *rsa.PrivateKey:
-//        cakeyrsa := cakey.(*rsa.PrivateKey)
-        //cakeypublic := cakeyrsa.PublicKey
-
-//        fmt.Printf("cakeyrsa=%s\n", cakeyrsa)
-    default:
-        panic("CA key not *rsa.PrivateKey")
+    if err != nil {
+        return nil, err
     }
+    switch k := cakey.(type) {
+    case *rsa.PrivateKey:
+        return k, nil
+    default:
+        return nil, fmt.Errorf("CA key %s not an PKCS8 RSA private key", cakeyfile)
+    }
+}
 
-
+func parseCacrt(cacrtfile string) (*x509.Certificate, error) {
     cacrtbytes, err := ioutil.ReadFile(cacrtfile)
     if err != nil {
-        panic(err)
+        return nil, err
     }
     cacrtblock, _ := pem.Decode(cacrtbytes)
     if (cacrtblock == nil) {
-        panic("Not valid CA crt")
+        return nil, fmt.Errorf("Not valid CA crt %s", cacrtfile)
     }
-    asn = cacrtblock.Bytes
+    return x509.ParseCertificate(cacrtblock.Bytes)
+}
 
-    cacrt, err := x509.ParseCertificate(asn)
-//    fmt.Printf("cacrt=%v\n", cacrt)
-
-
-
-
-    var notBefore time.Time
+func parseDates(validFrom, validFor *string) (*time.Time, *time.Time, error) {
+    var notBefore, notAfter time.Time
+    var err error
     if len(*validFrom) == 0 {
         notBefore = time.Now()
     } else {
         notBefore, err = time.Parse("Jan 2 15:04:05 2006", *validFrom)
         if err != nil {
-            fmt.Fprintf(os.Stderr, "Failed to parse creation date: %s\n", err)
-            os.Exit(1)
+            return nil, nil, fmt.Errorf("Could not parse 'from' date")
         }
     }
-
-    notAfter := notBefore.Add(*validFor)
-
-    serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-    serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+    m := regexp.MustCompile(`^(\d+)[ydhm]$`).FindStringSubmatch(*validFor)
+    if m == nil {
+        return nil, nil, fmt.Errorf("Could not parse 'period'")
+    }
+    n, err := strconv.Atoi(m[1])
     if err != nil {
-        log.Fatalf("failed to generate serial number: %s", err)
+        return nil, nil, fmt.Errorf("Could not parse 'period' unit")
+    }
+    switch m[2] {
+    case "y":
+        notAfter = notBefore.AddDate(n, 0, 0)
+    case "d":
+        notAfter = notBefore.AddDate(0, 0, n)
+    case "h":
+        notAfter = notBefore.Add(time.Hour * time.Duration(n))
+    case "m":
+        notAfter = notBefore.Add(time.Minute * time.Duration(n))
     }
 
-    template := x509.Certificate{
-        SerialNumber: serialNumber,
-        Subject: certRequest.Subject,
-        NotBefore: notBefore,
-        NotAfter:  notAfter,
-    }
+    return &notBefore, &notAfter, nil
+}
 
 
-    derBytes, err := x509.CreateCertificate(rand.Reader, &template, cacrt, certRequest.PublicKey, cakey.(*rsa.PrivateKey))
+func saveCrt(derBytes []byte, filename string) error {
+    certOut, err := os.Create(filename)
+    defer certOut.Close()
     if err != nil {
-        log.Fatalf("Failed to create certificate: %s", err)
+        return err
+    }
+    return pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
+}
+
+var (
+    csrfile    = flag.String("csr", "/home/sk/seckiss/confidential/sk/keys/fruho/vpn/sampleclient.csr", "Certificate Signing Request file")
+    cakeyfile  = flag.String("cakey", "/home/sk/seckiss/confidential/sk/keys/fruho/vpn/ca.key", "CA private key")
+    cacrtfile  = flag.String("cacrt", "/home/sk/seckiss/confidential/sk/keys/fruho/vpn/ca.crt", "CA certificate")
+    validFrom  = flag.String("from", "", "Creation date formatted as Jan 2 15:04:05 2006")
+    validFor   = flag.String("period", "", "Duration that certificate is valid for. E.g. 10y or 3650d or 24h or 30m (years, days, hours, minutes)")
+)
+
+func usage(err error) {
+    fmt.Println(err)
+    flag.Usage()
+    os.Exit(1)
+}
+
+func handleErr(err error) {
+    if err != nil {
+        usage(err)
+    }
+}
+
+
+
+func main() {
+    var err error
+    flag.Parse()
+
+    if (*csrfile == "") {
+        flag.Usage()
+        os.Exit(1)
     }
 
-    certOut, err := os.Create("cert.pem")
-    if err != nil {
-        log.Fatalf("failed to open cert.pem for writing: %s", err)
-    }
-    pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
-    certOut.Close()
-    log.Print("written cert.pem\n")
+    csr, err := parseCsr(*csrfile)
+    handleErr(err)
+
+    cakey, err := parseCakey(*cakeyfile)
+    handleErr(err)
+
+    cacrt, err := parseCacrt(*cacrtfile)
+    handleErr(err)
+
+    notBefore, notAfter, err := parseDates(validFrom, validFor)
+    handleErr(err)
+
+    derBytes, err := x509sign(cakey, cacrt, csr, notBefore, notAfter)
+    handleErr(err)
+
+    err = saveCrt(derBytes, "cert.pem")
+    handleErr(err)
 
 }
 
