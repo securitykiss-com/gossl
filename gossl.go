@@ -120,7 +120,7 @@ func parseDates(validFrom, validFor *string) (*time.Time, *time.Time, error) {
             return nil, nil, fmt.Errorf("Could not parse 'from' date")
         }
     }
-    m := regexp.MustCompile(`^(\d+)[ydhm]$`).FindStringSubmatch(*validFor)
+    m := regexp.MustCompile(`^(\d+)([ydhm])$`).FindStringSubmatch(*validFor)
     if m == nil {
         return nil, nil, fmt.Errorf("Could not parse 'period'")
     }
@@ -143,8 +143,8 @@ func parseDates(validFrom, validFor *string) (*time.Time, *time.Time, error) {
 }
 
 
-func saveCrt(derBytes []byte, filename string) error {
-    certOut, err := os.Create(filename)
+func saveCrt(derBytes []byte, filename *string) error {
+    certOut, err := os.Create(*filename)
     defer certOut.Close()
     if err != nil {
         return err
@@ -152,13 +152,6 @@ func saveCrt(derBytes []byte, filename string) error {
     return pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
 }
 
-var (
-    csrfile    = flag.String("csr", "/home/sk/seckiss/confidential/sk/keys/fruho/vpn/sampleclient.csr", "Certificate Signing Request file")
-    cakeyfile  = flag.String("cakey", "/home/sk/seckiss/confidential/sk/keys/fruho/vpn/ca.key", "CA private key")
-    cacrtfile  = flag.String("cacrt", "/home/sk/seckiss/confidential/sk/keys/fruho/vpn/ca.crt", "CA certificate")
-    validFrom  = flag.String("from", "", "Creation date formatted as Jan 2 15:04:05 2006")
-    validFor   = flag.String("period", "", "Duration that certificate is valid for. E.g. 10y or 3650d or 24h or 30m (years, days, hours, minutes)")
-)
 
 func usage(err error) {
     fmt.Println(err)
@@ -172,13 +165,20 @@ func handleErr(err error) {
     }
 }
 
-
+var (
+    csrfile    = flag.String("csr", "", "Certificate Signing Request file")
+    cakeyfile  = flag.String("cakey", "", "CA private key")
+    cacrtfile  = flag.String("cacrt", "", "CA certificate")
+    outfile    = flag.String("out", "", "Output certificate file")
+    validFrom  = flag.String("from", "", "Creation date formatted as 'Jan 2 15:04:05 2006'. Default is current time")
+    validFor   = flag.String("period", "", "Duration that certificate is valid for. E.g. 10y or 3650d or 24h or 30m (years, days, hours, minutes)")
+)
 
 func main() {
     var err error
     flag.Parse()
 
-    if (*csrfile == "") {
+    if (*csrfile == "" || *cakeyfile == "" || *cacrtfile == "" || *outfile == "" || *validFor == "") {
         flag.Usage()
         os.Exit(1)
     }
@@ -198,7 +198,7 @@ func main() {
     derBytes, err := x509sign(cakey, cacrt, csr, notBefore, notAfter)
     handleErr(err)
 
-    err = saveCrt(derBytes, "cert.pem")
+    err = saveCrt(derBytes, outfile)
     handleErr(err)
 
 }
