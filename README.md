@@ -14,7 +14,7 @@ It does roughly the same thing as this openssl command:
     -out client.crt -set_serial 01 -sha256 -req -days 365 
 
 The differences are:
-- does not depend on openssl, only Go standard library
+- does not depend on openssl, only Go standard library, compiled to standalone binary
 - can specify certificate start date (openssl always takes current time)
 - can specify certificate period in years, days, hours and minutes (openssl only days)
 
