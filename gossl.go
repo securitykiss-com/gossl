@@ -62,27 +62,50 @@ func x509sign(cakey *rsa.PrivateKey, cacrt *x509.Certificate, csr *x509.Certific
     return derBytes, nil
 }
 
+func x509signCmd(cakeyfie, cacrtfile, csrfile *string, notBefore, notAfter *time.Time, outfile *string) error {
+    csr, err := parseCsr(csrfile)
+    if err != nil {
+        return err
+    }
+    cakey, err := parseCakey(cakeyfile)
+    if err != nil {
+        return err
+    }
+    cacrt, err := parseCacrt(cacrtfile)
+    if err != nil {
+        return err
+    }
+    derBytes, err := x509sign(cakey, cacrt, csr, notBefore, notAfter)
+    if err != nil {
+        return err
+    }
+    err = saveCrt(derBytes, outfile)
+    if err != nil {
+        return err
+    }
+    return nil
+}
 
-func parseCsr(csrfile string) (*x509.CertificateRequest, error) {
-    csrbytes, err := ioutil.ReadFile(csrfile)
+func parseCsr(csrfile *string) (*x509.CertificateRequest, error) {
+    csrbytes, err := ioutil.ReadFile(*csrfile)
     if err != nil {
         return nil, err
     }
     csrblock, _ := pem.Decode(csrbytes)
     if csrblock == nil {
-        return nil, fmt.Errorf("PEM encoded data not found in %s", csrfile)
+        return nil, fmt.Errorf("PEM encoded data not found in %s", *csrfile)
     }
     return x509.ParseCertificateRequest(csrblock.Bytes)
 }
 
-func parseCakey(cakeyfile string) (*rsa.PrivateKey, error) {
-    cakeybytes, err := ioutil.ReadFile(cakeyfile)
+func parseCakey(cakeyfile *string) (*rsa.PrivateKey, error) {
+    cakeybytes, err := ioutil.ReadFile(*cakeyfile)
     if err != nil {
         return nil, err
     }
     cakeyblock, _ := pem.Decode(cakeybytes)
     if cakeyblock == nil {
-        return nil, fmt.Errorf("Not valid CA key %s", cakeyfile)
+        return nil, fmt.Errorf("Not valid CA key %s", *cakeyfile)
     }
     der := cakeyblock.Bytes
     cakey, err := x509.ParsePKCS8PrivateKey(der)
@@ -97,14 +120,14 @@ func parseCakey(cakeyfile string) (*rsa.PrivateKey, error) {
     }
 }
 
-func parseCacrt(cacrtfile string) (*x509.Certificate, error) {
-    cacrtbytes, err := ioutil.ReadFile(cacrtfile)
+func parseCacrt(cacrtfile *string) (*x509.Certificate, error) {
+    cacrtbytes, err := ioutil.ReadFile(*cacrtfile)
     if err != nil {
         return nil, err
     }
     cacrtblock, _ := pem.Decode(cacrtbytes)
     if (cacrtblock == nil) {
-        return nil, fmt.Errorf("Not valid CA crt %s", cacrtfile)
+        return nil, fmt.Errorf("Not valid CA crt %s", *cacrtfile)
     }
     return x509.ParseCertificate(cacrtblock.Bytes)
 }
@@ -183,22 +206,10 @@ func main() {
         os.Exit(1)
     }
 
-    csr, err := parseCsr(*csrfile)
-    handleErr(err)
-
-    cakey, err := parseCakey(*cakeyfile)
-    handleErr(err)
-
-    cacrt, err := parseCacrt(*cacrtfile)
-    handleErr(err)
-
     notBefore, notAfter, err := parseDates(validFrom, validFor)
     handleErr(err)
 
-    derBytes, err := x509sign(cakey, cacrt, csr, notBefore, notAfter)
-    handleErr(err)
-
-    err = saveCrt(derBytes, outfile)
+    err = x509signCmd(cakeyfile, cacrtfile, csrfile, notBefore, notAfter, outfile)
     handleErr(err)
 
 }
