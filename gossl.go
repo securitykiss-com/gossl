@@ -42,10 +42,23 @@ import (
     "strconv"
 )
 
+func uuidBigInt() (*big.Int, error) {
+    limit := new(big.Int).Lsh(big.NewInt(1), 128)
+    return rand.Int(rand.Reader, limit)
+}
+
+func uuidString() (string, error) {
+    bint, err := uuidBigInt()
+    if err != nil {
+        return "", err
+    }
+    b := bint.Bytes()
+    return fmt.Sprintf("%X-%X-%X-%X-%X", b[0:4], b[4:6], b[6:8], b[8:10], b[10:]), nil
+}
+
 
 func x509sign(cakey *rsa.PrivateKey, cacrt *x509.Certificate, csr *x509.CertificateRequest, notBefore *time.Time, notAfter *time.Time) ([]byte, error) {
-    serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-    serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+    serialNumber, err := uuidBigInt()
     if err != nil {
         return nil, err
     }
@@ -108,16 +121,25 @@ func parseCakey(cakeyfile *string) (*rsa.PrivateKey, error) {
         return nil, fmt.Errorf("Not valid CA key %s", *cakeyfile)
     }
     der := cakeyblock.Bytes
-    cakey, err := x509.ParsePKCS8PrivateKey(der)
+
+    // Try to parse as PKCS1
+    cakey1, err := x509.ParsePKCS1PrivateKey(der)
+    if err == nil {
+        return cakey1, err
+    }
+
+    // Otherwise try PKCS8
+    cakey8, err := x509.ParsePKCS8PrivateKey(der)
     if err != nil {
         return nil, err
     }
-    switch k := cakey.(type) {
+    switch k := cakey8.(type) {
     case *rsa.PrivateKey:
         return k, nil
     default:
         return nil, fmt.Errorf("CA key %s not an PKCS8 RSA private key", cakeyfile)
     }
+
 }
 
 func parseCacrt(cacrtfile *string) (*x509.Certificate, error) {
